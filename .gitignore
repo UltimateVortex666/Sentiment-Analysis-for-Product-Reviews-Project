@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+
+# Models & data artifacts
+models/
+temp_upload.csv
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

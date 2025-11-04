@@ -1,0 +1,12 @@
+numpy<2
+pandas
+scikit-learn
+joblib
+fastapi
+uvicorn[standard]
+nltk
+spacy
+tensorflow
+keras
+keras-preprocessing
+

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sentiment Analysis Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      background-color: #0078d7;
+      color: white;
+      padding: 1rem 2rem;
+      text-align: center;
+      font-size: 1.6rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      padding: 2rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      padding: 1.5rem;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+      color: #333;
+      margin-bottom: 1rem;
+    }
+
+    canvas {
+      width: 100%;
+      height: 400px;
+    }
+
+    .input-section {
+      text-align: center;
+      margin: 2rem 0;
+    }
+
+    .input-section input {
+      padding: 0.6rem;
+      width: 60%;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
+    }
+
+    .input-section button {
+      padding: 0.6rem 1.2rem;
+      margin-left: 0.5rem;
+      border: none;
+      background-color: #0078d7;
+      color: white;
+      border-radius: 0.5rem;
+      cursor: pointer;
+    }
+
+    .result-box {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+  <header>🧠 Amazon Product Review Sentiment Dashboard</header>
+
+  <div class="input-section">
+    <input type="text" id="reviewText" placeholder="Type a review to analyze sentiment..." />
+    <select id="modelSelect" aria-label="Select model">
+      <option value="nb" selected>Naive Bayes</option>
+      <option value="lstm">LSTM</option>
+    </select>
+    <button id="analyzeBtn" onclick="predictSentiment()">Analyze</button>
+    <div class="result-box" id="predictionResult"></div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h2>Overall Sentiment Distribution</h2>
+      <canvas id="sentimentPie"></canvas>
+    </div>
+
+    <div class="card">
+      <h2>Sentiment Trends Over Time</h2>
+      <canvas id="trendChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let pieChart, lineChart;
+
+    async function loadStats() {
+      const res = await fetch("/api/stats");
+      const data = await res.json();
+
+      const counts = data.counts || {};
+      const labels = Object.keys(counts);
+      const values = Object.values(counts);
+
+      const ctx = document.getElementById("sentimentPie").getContext("2d");
+      if (pieChart) pieChart.destroy();
+      pieChart = new Chart(ctx, {
+        type: "pie",
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: ["#4caf50", "#ffeb3b", "#f44336"],
+          }],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: "bottom" },
+            title: { display: false }
+          }
+        }
+      });
+    }
+
+    async function loadTrends() {
+      const res = await fetch("/api/trends");
+      const data = await res.json();
+      const records = data.trends || [];
+
+      const dates = records.map(r => r.date);
+      const positives = records.map(r => r.positive || 0);
+      const neutrals = records.map(r => r.neutral || 0);
+      const negatives = records.map(r => r.negative || 0);
+
+      const ctx = document.getElementById("trendChart").getContext("2d");
+      if (lineChart) lineChart.destroy();
+      lineChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: dates,
+          datasets: [
+            {
+              label: "Positive",
+              data: positives,
+              borderColor: "#4caf50",
+              fill: false,
+              tension: 0.3
+            },
+            {
+              label: "Neutral",
+              data: neutrals,
+              borderColor: "#ffeb3b",
+              fill: false,
+              tension: 0.3
+            },
+            {
+              label: "Negative",
+              data: negatives,
+              borderColor: "#f44336",
+              fill: false,
+              tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            x: { title: { display: true, text: "Date" } },
+            y: { title: { display: true, text: "Number of Reviews" } }
+          },
+          plugins: {
+            legend: { position: "top" },
+            title: { display: false }
+          }
+        }
+      });
+    }
+
+    async function predictSentiment() {
+      const text = document.getElementById("reviewText").value;
+      const model = document.getElementById("modelSelect").value;
+      if (!text.trim()) {
+        document.getElementById("predictionResult").innerHTML = "<span style='color:red;'>Please enter text.</span>";
+        return;
+      }
+
+      const btn = document.getElementById("analyzeBtn");
+      const prevLabel = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = "Analyzing...";
+
+      try {
+        const res = await fetch("/api/predict", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, model })
+        });
+
+        const data = await res.json();
+        if (data.error) {
+          document.getElementById("predictionResult").innerHTML = `<span style='color:red;'>${data.error}</span>`;
+          return;
+        }
+
+        document.getElementById("predictionResult").innerHTML = `
+        <strong>Model:</strong> ${data.model}<br>
+        <strong>Prediction:</strong> <span style="color:${data.prediction === 'positive' ? 'green' : data.prediction === 'negative' ? 'red' : 'orange'}">${data.prediction}</span>
+      `;
+      } catch (e) {
+        document.getElementById("predictionResult").innerHTML = `<span style='color:red;'>Request failed. Please try again.</span>`;
+      } finally {
+        btn.disabled = false;
+        btn.innerText = prevLabel;
+      }
+    }
+
+    window.onload = () => {
+      loadStats();
+      loadTrends();
+    };
+  </script>
+</body>
+</html>
